@@ -4,6 +4,7 @@ import {
   EMPTY_CONDITION_DRAFT,
   buildCondition,
   formatCondition,
+  formatConditionValue,
   parseConditionValue,
 } from "./webhook-payload-condition";
 
@@ -74,5 +75,13 @@ describe("formatCondition", () => {
     expect(formatCondition({ path: "a", op: "contains", value: "x", ignore_case: true })).toBe('a contains/i "x"');
     expect(formatCondition({ path: "a", op: "in", values: ["x", 1] })).toBe('a in ["x", 1]');
     expect(formatCondition({ path: "a", op: "exists" })).toBe("a exists");
+  });
+});
+
+describe("formatConditionValue", () => {
+  it("quotes strings and leaves booleans and numbers bare", () => {
+    expect(formatConditionValue({ path: "a", op: "equals", value: "x" })).toBe('"x"');
+    expect(formatConditionValue({ path: "a", op: "equals", value: false })).toBe("false");
+    expect(formatConditionValue({ path: "a", op: "in", values: ["x", 1] })).toBe('"x", 1');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent, within } from "@testing-library/react";
 import { renderWithI18n } from "../../test/i18n";
 import { WebhookEventFilterSection } from "./webhook-event-filter-section";
 
@@ -61,7 +61,7 @@ describe("WebhookEventFilterSection", () => {
     ]);
   });
 
-  it("lists each payload condition on its filter row", () => {
+  it("lists each payload condition with a readable operator", () => {
     renderWithI18n(
       <WebhookEventFilterSection
         filters={[
@@ -76,10 +76,11 @@ describe("WebhookEventFilterSection", () => {
         onChange={vi.fn()}
       />,
     );
-    expect(screen.getByText("pull_request.draft equals false")).toBeInTheDocument();
+    const draft = screen.getByTitle("pull_request.draft equals false");
+    expect(draft).toHaveTextContent("pull_request.draftisfalse");
     expect(
-      screen.getByText('pull_request.base.ref in ["main", "release"]'),
-    ).toBeInTheDocument();
+      screen.getByTitle('pull_request.base.ref in ["main", "release"]'),
+    ).toHaveTextContent('pull_request.base.refis one of"main", "release"');
   });
 
   it("adds a condition to the filter it was opened on", () => {
@@ -90,9 +91,11 @@ describe("WebhookEventFilterSection", () => {
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "Condition" })[0]!);
-    // The editor's Add sits inside the row, before the new-filter Add.
-    const add = screen.getAllByRole("button", { name: "Add" })[0]!;
+    fireEvent.click(screen.getAllByRole("button", { name: "Add condition" })[0]!);
+    const add = within(screen.getByRole("group", { name: "Add condition" })).getByRole(
+      "button",
+      { name: "Add" },
+    );
     expect(add).toBeDisabled();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Payload field" }), {
@@ -112,6 +115,18 @@ describe("WebhookEventFilterSection", () => {
       },
       { event: "push" },
     ]);
+  });
+
+  it("closes the editor on cancel without changing filters", () => {
+    const onChange = vi.fn();
+    renderWithI18n(
+      <WebhookEventFilterSection filters={[{ event: "issues" }]} onChange={onChange} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+    expect(screen.getByRole("textbox", { name: "Payload field" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("textbox", { name: "Payload field" })).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("removes one condition and drops the key when none are left", () => {

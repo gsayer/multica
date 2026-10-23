@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, Filter, ExternalLink } from "lucide-react";
+import { X, Plus, Filter, ExternalLink, CaseSensitive } from "lucide-react";
 import { cn } from "@multica/ui/lib/utils";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
+import { Button } from "@multica/ui/components/ui/button";
 import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import {
   Select,
@@ -23,10 +24,10 @@ import {
   MAX_CONDITIONS,
   buildCondition,
   formatCondition,
+  formatConditionValue,
   type ConditionDraft,
   type ConditionOp,
 } from "./webhook-payload-condition";
-
 
 interface WebhookEventFilterSectionProps {
   filters: WebhookEventFilter[];
@@ -86,8 +87,10 @@ export function WebhookEventFilterSection({
   const addCondition = (idx: number) => {
     if (!draftCondition) return;
     updateConditions(idx, [...(filters[idx]?.conditions ?? []), draftCondition]);
-    setDraft(EMPTY_CONDITION_DRAFT);
+    setEditingIdx(null);
   };
+
+  const opLabel = (op: ConditionOp) => t(($) => $.dialog.event_filter_condition_ops[op]);
 
   return (
     <div className="space-y-2">
@@ -111,48 +114,71 @@ export function WebhookEventFilterSection({
           {filters.map((f, idx) => {
             const conditions = f.conditions ?? [];
             const editing = editingIdx === idx;
+            const canAddCondition = !editing && conditions.length < MAX_CONDITIONS;
             return (
-              <div key={idx} className="rounded-md border bg-background px-2.5 py-1.5 text-caption">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-medium text-foreground">{f.event}</span>
+              <div key={idx} className="rounded-md border bg-background text-caption">
+                <div className="flex min-w-0 items-center gap-2 py-1 pr-1 pl-2.5">
+                  <span className="shrink-0 font-mono font-medium text-foreground">{f.event}</span>
                   {f.actions && f.actions.length > 0 && (
-                    <span className="text-muted-foreground">: {f.actions.join(", ")}</span>
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      {f.actions.join(" · ")}
+                    </span>
                   )}
-                  {!editing && conditions.length < MAX_CONDITIONS && (
-                    <button
-                      type="button"
-                      onClick={() => openEditor(idx)}
-                      className="ml-auto inline-flex items-center gap-0.5 rounded-xs px-1 py-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    >
-                      <Plus className="size-3" />
-                      {t(($) => $.dialog.event_filter_condition_add)}
-                    </button>
-                  )}
-                  <TooltipHint label={t(($) => $.dialog.event_filter_remove_label)}>
-                    <button
-                      type="button"
-                      onClick={() => removeFilter(idx)}
-                      aria-label={t(($) => $.dialog.event_filter_remove_label)}
-                      className={cn(
-                        "rounded-xs p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
-                        (editing || conditions.length >= MAX_CONDITIONS) && "ml-auto",
-                      )}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </TooltipHint>
+                  <div className="ml-auto flex shrink-0 items-center">
+                    {canAddCondition && (
+                      <TooltipHint label={t(($) => $.dialog.event_filter_condition_add_label)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => openEditor(idx)}
+                          aria-label={t(($) => $.dialog.event_filter_condition_add_label)}
+                        >
+                          <Plus />
+                        </Button>
+                      </TooltipHint>
+                    )}
+                    <TooltipHint label={t(($) => $.dialog.event_filter_remove_label)}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => removeFilter(idx)}
+                        aria-label={t(($) => $.dialog.event_filter_remove_label)}
+                      >
+                        <X />
+                      </Button>
+                    </TooltipHint>
+                  </div>
                 </div>
 
                 {conditions.length > 0 && (
-                  <ul className="mt-1 space-y-0.5">
+                  <ul className="border-t py-1">
                     {conditions.map((c, cIdx) => (
-                      <li key={cIdx} className="flex min-w-0 items-center gap-2 pl-2">
-                        <span className="min-w-0 truncate font-mono text-muted-foreground">
-                          {formatCondition(c)}
-                        </span>
+                      <li
+                        key={cIdx}
+                        title={formatCondition(c)}
+                        className="flex min-w-0 items-center gap-1.5 py-0.5 pr-1 pl-2.5"
+                      >
+                        <span className="min-w-0 truncate font-mono text-foreground">{c.path}</span>
+                        <span className="shrink-0 text-muted-foreground">{opLabel(c.op)}</span>
+                        {c.op !== "exists" && (
+                          <span className="max-w-[45%] shrink-0 truncate font-mono text-foreground">
+                            {formatConditionValue(c)}
+                          </span>
+                        )}
+                        {c.ignore_case && (
+                          <CaseSensitive
+                            aria-label={t(($) => $.dialog.event_filter_condition_ignore_case)}
+                            className="size-3.5 shrink-0 text-muted-foreground"
+                          />
+                        )}
                         <TooltipHint label={t(($) => $.dialog.event_filter_condition_remove_label)}>
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            className="ml-auto"
                             onClick={() =>
                               updateConditions(
                                 idx,
@@ -160,10 +186,9 @@ export function WebhookEventFilterSection({
                               )
                             }
                             aria-label={t(($) => $.dialog.event_filter_condition_remove_label)}
-                            className="ml-auto rounded-xs p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                           >
-                            <X className="size-3" />
-                          </button>
+                            <X />
+                          </Button>
                         </TooltipHint>
                       </li>
                     ))}
@@ -171,18 +196,23 @@ export function WebhookEventFilterSection({
                 )}
 
                 {editing && (
-                  <div className="mt-1.5 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={draft.path}
-                        onChange={(e) => setDraft({ ...draft, path: e.target.value })}
-                        aria-label={t(($) => $.dialog.event_filter_condition_path_label)}
-                        placeholder={t(($) => $.dialog.event_filter_condition_path_placeholder)}
-                        className="min-w-32 flex-1 rounded-md border bg-background px-2.5 py-1.5 text-caption font-mono outline-none focus:ring-1 focus:ring-ring"
-                      />
+                  <div
+                    role="group"
+                    aria-label={t(($) => $.dialog.event_filter_condition_add_label)}
+                    className="space-y-1.5 border-t p-2"
+                  >
+                    <input
+                      type="text"
+                      autoFocus
+                      value={draft.path}
+                      onChange={(e) => setDraft({ ...draft, path: e.target.value })}
+                      aria-label={t(($) => $.dialog.event_filter_condition_path_label)}
+                      placeholder={t(($) => $.dialog.event_filter_condition_path_placeholder)}
+                      className="h-7 w-full rounded-md border bg-background px-2.5 text-caption font-mono outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <div className="flex gap-1.5">
                       <Select
-                        items={CONDITION_OPS.map((op) => ({ value: op, label: op }))}
+                        items={CONDITION_OPS.map((op) => ({ value: op, label: opLabel(op) }))}
                         value={draft.op}
                         onValueChange={(v) => {
                           if (v) setDraft({ ...draft, op: v as ConditionOp });
@@ -191,14 +221,14 @@ export function WebhookEventFilterSection({
                         <SelectTrigger
                           size="sm"
                           aria-label={t(($) => $.dialog.event_filter_condition_op_label)}
-                          className="w-32 font-mono"
+                          className={cn("text-caption", draft.op === "exists" ? "w-full" : "w-28 shrink-0")}
                         >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {CONDITION_OPS.map((op) => (
-                            <SelectItem key={op} value={op} className="font-mono">
-                              {op}
+                            <SelectItem key={op} value={op}>
+                              {opLabel(op)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -220,13 +250,13 @@ export function WebhookEventFilterSection({
                               ? t(($) => $.dialog.event_filter_condition_values_placeholder)
                               : t(($) => $.dialog.event_filter_condition_value_placeholder)
                           }
-                          className="min-w-24 flex-1 rounded-md border bg-background px-2.5 py-1.5 text-caption font-mono outline-none focus:ring-1 focus:ring-ring"
+                          className="h-7 min-w-0 flex-1 rounded-md border bg-background px-2.5 text-caption font-mono outline-none focus:ring-1 focus:ring-ring"
                         />
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {draft.op !== "exists" && (
-                        <label className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <label className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
                           <Checkbox
                             checked={draft.ignoreCase}
                             onCheckedChange={(checked) =>
@@ -236,31 +266,25 @@ export function WebhookEventFilterSection({
                           {t(($) => $.dialog.event_filter_condition_ignore_case)}
                         </label>
                       )}
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
+                        className="ml-auto"
                         onClick={() => setEditingIdx(null)}
-                        className="ml-auto rounded-md px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       >
-                        {t(($) => $.dialog.event_filter_condition_done)}
-                      </button>
-                      <button
+                        {t(($) => $.dialog.event_filter_condition_cancel)}
+                      </Button>
+                      <Button
                         type="button"
+                        variant="secondary"
+                        size="xs"
                         onClick={() => addCondition(idx)}
                         disabled={!draftCondition}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 font-medium transition-colors",
-                          draftCondition
-                            ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-                            : "bg-muted text-muted-foreground cursor-not-allowed",
-                        )}
                       >
-                        <Plus className="size-3.5" />
                         {t(($) => $.dialog.event_filter_add)}
-                      </button>
+                      </Button>
                     </div>
-                    <p className="text-micro text-muted-foreground">
-                      {t(($) => $.dialog.event_filter_condition_hint)}
-                    </p>
                   </div>
                 )}
               </div>

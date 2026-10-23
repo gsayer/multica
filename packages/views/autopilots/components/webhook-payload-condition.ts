@@ -5,18 +5,22 @@ import type {
 
 export type ConditionOp = WebhookPayloadCondition["op"];
 
-// Op tokens are API identifiers and render as code, not translated copy.
 export const CONDITION_OPS: ConditionOp[] = ["equals", "not_equals", "contains", "in", "exists"];
 
 // Mirrors the server cap so the editor never builds a row the API rejects.
 export const MAX_CONDITIONS = 20;
 
+// formatConditionValue shows strings quoted and booleans/numbers bare, so
+// the stored type stays visible.
+export function formatConditionValue(c: WebhookPayloadCondition): string {
+  if (c.op === "in") return (c.values ?? []).map((v) => JSON.stringify(v)).join(", ");
+  return JSON.stringify(c.value);
+}
+
+// formatCondition is the full API form, used as the row's tooltip.
 export function formatCondition(c: WebhookPayloadCondition): string {
   if (c.op === "exists") return `${c.path} exists`;
-  const value =
-    c.op === "in"
-      ? `[${(c.values ?? []).map((v) => JSON.stringify(v)).join(", ")}]`
-      : JSON.stringify(c.value);
+  const value = c.op === "in" ? `[${formatConditionValue(c)}]` : formatConditionValue(c);
   return `${c.path} ${c.op}${c.ignore_case ? "/i" : ""} ${value}`;
 }
 
