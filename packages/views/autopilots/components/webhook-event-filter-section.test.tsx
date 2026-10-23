@@ -61,7 +61,7 @@ describe("WebhookEventFilterSection", () => {
     ]);
   });
 
-  it("shows API-authored payload conditions on the row", () => {
+  it("lists each payload condition on its filter row", () => {
     renderWithI18n(
       <WebhookEventFilterSection
         filters={[
@@ -76,9 +76,56 @@ describe("WebhookEventFilterSection", () => {
         onChange={vi.fn()}
       />,
     );
+    expect(screen.getByText("pull_request.draft equals false")).toBeInTheDocument();
     expect(
-      screen.getByText('pull_request.draft equals false ∧ pull_request.base.ref in ["main", "release"]'),
+      screen.getByText('pull_request.base.ref in ["main", "release"]'),
     ).toBeInTheDocument();
+  });
+
+  it("adds a condition to the filter it was opened on", () => {
+    const onChange = vi.fn();
+    renderWithI18n(
+      <WebhookEventFilterSection
+        filters={[{ event: "issues", actions: ["labeled"] }, { event: "push" }]}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Condition" })[0]!);
+    // The editor's Add sits inside the row, before the new-filter Add.
+    const add = screen.getAllByRole("button", { name: "Add" })[0]!;
+    expect(add).toBeDisabled();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Payload field" }), {
+      target: { value: "label.name" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Value" }), {
+      target: { value: "agent" },
+    });
+    expect(add).toBeEnabled();
+    fireEvent.click(add);
+
+    expect(onChange).toHaveBeenCalledWith([
+      {
+        event: "issues",
+        actions: ["labeled"],
+        conditions: [{ path: "label.name", op: "equals", value: "agent" }],
+      },
+      { event: "push" },
+    ]);
+  });
+
+  it("removes one condition and drops the key when none are left", () => {
+    const onChange = vi.fn();
+    renderWithI18n(
+      <WebhookEventFilterSection
+        filters={[
+          { event: "issues", conditions: [{ path: "label.name", op: "equals", value: "agent" }] },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove condition" }));
+    expect(onChange).toHaveBeenCalledWith([{ event: "issues" }]);
   });
 
   it("drops the row from the list when remove is clicked", () => {
