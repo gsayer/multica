@@ -4,8 +4,21 @@ import { useState } from "react";
 import { X, Plus, Filter, ExternalLink } from "lucide-react";
 import { cn } from "@multica/ui/lib/utils";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
-import type { WebhookEventFilter } from "@multica/core/types";
+import type {
+  WebhookEventFilter,
+  WebhookPayloadCondition,
+} from "@multica/core/types";
 import { useT } from "../../i18n";
+
+// Conditions are API-authored; the row shows them read-only so removing a
+// filter is never a surprise.
+function formatCondition(c: WebhookPayloadCondition): string {
+  const value =
+    c.op === "in"
+      ? `[${(c.values ?? []).map((v) => JSON.stringify(v)).join(", ")}]`
+      : JSON.stringify(c.value);
+  return `${c.path} ${c.op}${c.ignore_case ? "/i" : ""} ${value}`;
+}
 
 interface WebhookEventFilterSectionProps {
   filters: WebhookEventFilter[];
@@ -73,6 +86,11 @@ export function WebhookEventFilterSection({
               {f.actions && f.actions.length > 0 && (
                 <span className="text-muted-foreground">
                   : {f.actions.join(", ")}
+                </span>
+              )}
+              {f.conditions && f.conditions.length > 0 && (
+                <span className="min-w-0 truncate font-mono text-muted-foreground">
+                  {f.conditions.map(formatCondition).join(" ∧ ")}
                 </span>
               )}
               <TooltipHint label={t(($) => $.dialog.event_filter_remove_label)}>

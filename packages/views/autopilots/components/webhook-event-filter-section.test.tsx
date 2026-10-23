@@ -61,6 +61,26 @@ describe("WebhookEventFilterSection", () => {
     ]);
   });
 
+  it("shows API-authored payload conditions on the row", () => {
+    renderWithI18n(
+      <WebhookEventFilterSection
+        filters={[
+          {
+            event: "chat_1",
+            conditions: [
+              { path: "is_sender", op: "equals", value: false },
+              { path: "message", op: "contains", value: "@bot", ignore_case: true },
+            ],
+          },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText('is_sender equals false ∧ message contains/i "@bot"'),
+    ).toBeInTheDocument();
+  });
+
   it("drops the row from the list when remove is clicked", () => {
     const onChange = vi.fn();
     renderWithI18n(
