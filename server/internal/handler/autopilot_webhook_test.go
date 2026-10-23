@@ -369,7 +369,7 @@ func TestWebhookEventAllowedByTriggerScope_ConditionsDoNotShadowLaterFilters(t *
 }
 
 func TestWebhookEventAllowedByTriggerScope_ConditionOps(t *testing.T) {
-	payload := `{"status":"Open","count":3,"items":[{"tag":"urgent"},{"tag":"docs"}],"commits":[{"files":["a.go"]},{"files":["README.md"]}]}`
+	payload := `{"status":"Open","closed_at":null,"count":3,"items":[{"tag":"urgent"},{"tag":"docs"}],"commits":[{"files":["a.go"]},{"files":["README.md"]}]}`
 	cases := []struct {
 		name string
 		cond string
@@ -390,6 +390,9 @@ func TestWebhookEventAllowedByTriggerScope_ConditionOps(t *testing.T) {
 		{"nested wildcards", `{"path":"commits.*.files.*","op":"contains","value":".md"}`, true},
 		{"wildcard on object", `{"path":"status.*","op":"equals","value":"Open"}`, false},
 		{"in ignore_case", `{"path":"status","op":"in","values":["closed","open"],"ignore_case":true}`, true},
+		{"exists", `{"path":"items.*.tag","op":"exists"}`, true},
+		{"exists on missing path", `{"path":"merged_at","op":"exists"}`, false},
+		{"exists ignores null", `{"path":"closed_at","op":"exists"}`, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -418,6 +421,7 @@ func TestValidateWebhookEventFilters_Conditions(t *testing.T) {
 		"object value":      `{"path":"sender.type","op":"equals","value":{"a":1}}`,
 		"contains non-text": `{"path":"sender.type","op":"contains","value":1}`,
 		"empty in":          `{"path":"sender.type","op":"in","values":[]}`,
+		"exists with value": `{"path":"sender.type","op":"exists","value":"x"}`,
 	}
 	for name, cond := range invalid {
 		t.Run(name, func(t *testing.T) {

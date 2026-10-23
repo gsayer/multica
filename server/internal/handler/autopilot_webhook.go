@@ -657,6 +657,7 @@ const (
 	payloadOpNotEquals = "not_equals"
 	payloadOpContains  = "contains"
 	payloadOpIn        = "in"
+	payloadOpExists    = "exists"
 )
 
 const webhookPathWildcard = "*"
@@ -717,8 +718,12 @@ func validateWebhookPayloadCondition(c WebhookPayloadCondition) error {
 				return errors.New("values must be strings, numbers or booleans")
 			}
 		}
+	case payloadOpExists:
+		if c.Value != nil || len(c.Values) > 0 {
+			return errors.New("exists takes no value")
+		}
 	default:
-		return fmt.Errorf("op must be one of %s, %s, %s, %s", payloadOpEquals, payloadOpNotEquals, payloadOpContains, payloadOpIn)
+		return fmt.Errorf("op must be one of %s, %s, %s, %s, %s", payloadOpEquals, payloadOpNotEquals, payloadOpContains, payloadOpIn, payloadOpExists)
 	}
 	return nil
 }
@@ -884,9 +889,9 @@ func webhookPayloadConditionsHold(conditions []WebhookPayloadCondition, payload 
 }
 
 // webhookPayloadConditionHolds resolves the path to every value it reaches
-// (a "*" segment fans out over array elements). equals, contains and in
-// hold when any value matches; not_equals holds when none does. A path that
-// reaches nothing never matches.
+// (a "*" segment fans out over array elements). equals, contains, in and
+// exists hold when any value matches; not_equals holds when none does. A
+// path that reaches nothing never matches, and exists ignores JSON nulls.
 func webhookPayloadConditionHolds(c WebhookPayloadCondition, payload any) bool {
 	values := resolveWebhookPayloadPath(payload, strings.Split(c.Path, "."))
 	if len(values) == 0 {
@@ -910,6 +915,8 @@ func webhookPayloadConditionHolds(c WebhookPayloadCondition, payload any) bool {
 
 func webhookConditionValueMatches(c WebhookPayloadCondition, got any) bool {
 	switch c.Op {
+	case payloadOpExists:
+		return got != nil
 	case payloadOpEquals:
 		return webhookConditionValuesEqual(got, c.Value, c.IgnoreCase)
 	case payloadOpContains:

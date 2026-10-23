@@ -71,7 +71,7 @@ export type WebhookPayloadConditionValue = string | number | boolean;
 // element. A missing path never matches.
 export interface WebhookPayloadCondition {
   path: string;
-  op: "equals" | "not_equals" | "contains" | "in";
+  op: "equals" | "not_equals" | "contains" | "in" | "exists";
   value?: WebhookPayloadConditionValue;
   values?: WebhookPayloadConditionValue[];
   ignore_case?: boolean;

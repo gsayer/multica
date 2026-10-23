@@ -13,6 +13,7 @@ import { useT } from "../../i18n";
 // Conditions are API-authored; the row shows them read-only so removing a
 // filter is never a surprise.
 function formatCondition(c: WebhookPayloadCondition): string {
+  if (c.op === "exists") return `${c.path} exists`;
   const value =
     c.op === "in"
       ? `[${(c.values ?? []).map((v) => JSON.stringify(v)).join(", ")}]`
