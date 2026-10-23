@@ -82,6 +82,19 @@ Lorsqu'une même source envoie plusieurs types d'événements, ajoutez des filtr
 
 Par exemple, avec `workflow_run` comme nom d'événement et `completed, failed` comme actions, seuls ces deux types de résultats `workflow_run` sont acceptés. Multica reconnaît l'événement et l'action à partir des en-têtes de requête et des champs de charge utile courants, notamment l'en-tête `X-GitHub-Event` de GitHub et le champ `action` du corps.
 
+Un filtre peut aussi porter des `conditions` sur les champs de la charge utile, définies via l'API. Toutes les conditions doivent être vraies pour que la ligne corresponde ; un événement filtré est ignoré avant le démarrage de toute exécution. `path` parcourt la charge utile avec des points (`sender.id`, `items.0.tag`), `op` vaut `equals`, `not_equals`, `contains` ou `in`, et `ignore_case` s'applique au texte. Un champ absent ne correspond jamais. Par exemple, cette ligne n'accepte que les messages qui mentionnent `@bot`, viennent de deux expéditeurs autorisés et n'ont pas été envoyés par le bot lui-même :
+
+```json
+{
+  "event": "chat_1",
+  "conditions": [
+    { "path": "is_sender", "op": "equals", "value": false },
+    { "path": "message", "op": "contains", "value": "@bot", "ignore_case": true },
+    { "path": "sender.id", "op": "in", "values": ["alice", "bob"] }
+  ]
+}
+```
+
 ### Protéger l'URL du webhook
 
 <Callout type="warning">

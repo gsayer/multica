@@ -82,6 +82,19 @@ Webhook 请求的约束：
 
 例如，事件名填写 `workflow_run`，Actions 填写 `completed, failed`，只会接收这两类 `workflow_run` 结果。Multica 会从常见请求头和 payload 中识别事件与 action，包括 GitHub 的 `X-GitHub-Event` 和 body 中的 `action`。
 
+过滤行还可以通过 API 设置针对 payload 字段的 `conditions`。所有条件都满足时该行才命中；被过滤的事件在任何运行开始前就会被忽略。`path` 用点号访问 payload（`sender.id`、`items.0.tag`），`op` 可选 `equals`、`not_equals`、`contains` 或 `in`，`ignore_case` 作用于文本。字段不存在时永远不命中。例如，下面这一行只接收提到 `@bot`、来自两个允许的发送者、且不是机器人自己发出的消息：
+
+```json
+{
+  "event": "chat_1",
+  "conditions": [
+    { "path": "is_sender", "op": "equals", "value": false },
+    { "path": "message", "op": "contains", "value": "@bot", "ignore_case": true },
+    { "path": "sender.id", "op": "in", "values": ["alice", "bob"] }
+  ]
+}
+```
+
 ### 保护 Webhook URL
 
 <Callout type="warning">

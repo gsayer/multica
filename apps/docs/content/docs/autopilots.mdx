@@ -82,6 +82,19 @@ When one source sends several event types, add event filters to the trigger. Eac
 
 For example, with `workflow_run` as the event name and `completed, failed` as the actions, only those two kinds of `workflow_run` results are accepted. Multica recognizes the event and action from common request headers and payload fields, including GitHub's `X-GitHub-Event` and the `action` field in the body.
 
+A filter can also carry `conditions` on payload fields, set through the API. Every condition must hold for the row to match; a filtered event is ignored before any run starts. `path` walks the payload with dots (`sender.id`, `items.0.tag`), `op` is `equals`, `not_equals`, `contains` or `in`, and `ignore_case` applies to text. A missing field never matches. For example, this row only accepts messages that mention `@bot`, come from two allowed senders, and weren't sent by the bot itself:
+
+```json
+{
+  "event": "chat_1",
+  "conditions": [
+    { "path": "is_sender", "op": "equals", "value": false },
+    { "path": "message", "op": "contains", "value": "@bot", "ignore_case": true },
+    { "path": "sender.id", "op": "in", "values": ["alice", "bob"] }
+  ]
+}
+```
+
 ### Protect the webhook URL
 
 <Callout type="warning">

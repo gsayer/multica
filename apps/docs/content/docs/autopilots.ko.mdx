@@ -82,6 +82,19 @@ Webhook 요청에는 다음 제약이 있습니다.
 
 예를 들어 이벤트 이름에 `workflow_run`, Actions에 `completed, failed`를 입력하면 이 두 종류의 `workflow_run` 결과만 받습니다. Multica는 GitHub의 `X-GitHub-Event`와 body의 `action`을 포함해 일반적인 요청 header와 payload에서 이벤트와 action을 식별합니다.
 
+필터에는 API로 payload 필드에 대한 `conditions`도 지정할 수 있습니다. 모든 조건을 만족해야 해당 줄이 일치하며, 걸러진 이벤트는 실행이 시작되기 전에 무시됩니다. `path`는 점으로 payload를 따라가고(`sender.id`, `items.0.tag`), `op`는 `equals`, `not_equals`, `contains`, `in` 중 하나이며, `ignore_case`는 텍스트에 적용됩니다. 필드가 없으면 일치하지 않습니다. 예를 들어 아래 줄은 `@bot`을 언급하고, 허용된 두 발신자가 보냈으며, 봇이 직접 보낸 것이 아닌 메시지만 받습니다.
+
+```json
+{
+  "event": "chat_1",
+  "conditions": [
+    { "path": "is_sender", "op": "equals", "value": false },
+    { "path": "message", "op": "contains", "value": "@bot", "ignore_case": true },
+    { "path": "sender.id", "op": "in", "values": ["alice", "bob"] }
+  ]
+}
+```
+
 ### Webhook URL 보호
 
 <Callout type="warning">
