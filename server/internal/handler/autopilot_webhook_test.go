@@ -318,6 +318,119 @@ func TestWebhookEventAllowedByTriggerScope_MultipleFilters(t *testing.T) {
 	}
 }
 
+// chatMentionFilters mirrors a chat-bot trigger: one conversation, two
+// allowed authors, a case-insensitive mention, and never the bot's own
+// messages.
+const chatMentionFilters = `[{"event":"chat_1","conditions":[
+	{"path":"is_sender","op":"equals","value":false},
+	{"path":"message","op":"contains","value":"@bot","ignore_case":true},
+	{"path":"sender.id","op":"in","values":["alice","bob"]}
+]}]`
+
+func chatEnvelope(payload string) WebhookEnvelope {
+	return WebhookEnvelope{Event: "chat_1", EventPayload: json.RawMessage(payload)}
+}
+
+func TestWebhookEventAllowedByTriggerScope_PayloadConditions(t *testing.T) {
+	filters := []byte(chatMentionFilters)
+	cases := []struct {
+		name    string
+		payload string
+		want    bool
+	}{
+		{"all conditions hold", `{"is_sender":false,"message":"hey @Bot help","sender":{"id":"alice"}}`, true},
+		{"no mention", `{"is_sender":false,"message":"hey there","sender":{"id":"alice"}}`, false},
+		{"own message", `{"is_sender":true,"message":"@bot reply","sender":{"id":"alice"}}`, false},
+		{"unlisted author", `{"is_sender":false,"message":"@bot","sender":{"id":"mallory"}}`, false},
+		{"missing path", `{"is_sender":false,"message":"@bot"}`, false},
+		{"string is not a boolean", `{"is_sender":"false","message":"@bot","sender":{"id":"bob"}}`, false},
+		{"non-object payload", `["@bot"]`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := webhookEventAllowedByTriggerScope(filters, chatEnvelope(tc.payload)); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWebhookEventAllowedByTriggerScope_ConditionsDoNotShadowLaterFilters(t *testing.T) {
+	filters := []byte(`[
+		{"event":"chat_1","conditions":[{"path":"message","op":"contains","value":"@bot"}]},
+		{"event":"chat_1","conditions":[{"path":"priority","op":"equals","value":1}]}
+	]`)
+	if !webhookEventAllowedByTriggerScope(filters, chatEnvelope(`{"message":"hi","priority":1}`)) {
+		t.Fatal("second filter should match when the first one's conditions fail")
+	}
+}
+
+func TestWebhookEventAllowedByTriggerScope_ConditionOps(t *testing.T) {
+	payload := `{"status":"Open","count":3,"items":[{"tag":"urgent"}]}`
+	cases := []struct {
+		name string
+		cond string
+		want bool
+	}{
+		{"equals is case-sensitive by default", `{"path":"status","op":"equals","value":"open"}`, false},
+		{"equals ignore_case", `{"path":"status","op":"equals","value":"open","ignore_case":true}`, true},
+		{"not_equals", `{"path":"status","op":"not_equals","value":"Closed"}`, true},
+		{"not_equals on missing path", `{"path":"missing","op":"not_equals","value":"x"}`, false},
+		{"equals number", `{"path":"count","op":"equals","value":3}`, true},
+		{"contains on number", `{"path":"count","op":"contains","value":"3"}`, false},
+		{"array index", `{"path":"items.0.tag","op":"equals","value":"urgent"}`, true},
+		{"array index out of range", `{"path":"items.1.tag","op":"equals","value":"urgent"}`, false},
+		{"in ignore_case", `{"path":"status","op":"in","values":["closed","open"],"ignore_case":true}`, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			filters := []byte(`[{"event":"chat_1","conditions":[` + tc.cond + `]}]`)
+			if got := webhookEventAllowedByTriggerScope(filters, chatEnvelope(payload)); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateWebhookEventFilters_Conditions(t *testing.T) {
+	var valid []WebhookEventFilter
+	if err := json.Unmarshal([]byte(chatMentionFilters), &valid); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if err := validateWebhookEventFilters(valid); err != nil {
+		t.Fatalf("valid filters rejected: %v", err)
+	}
+
+	invalid := map[string]string{
+		"empty path":        `{"path":"","op":"equals","value":"x"}`,
+		"empty segment":     `{"path":"sender..id","op":"equals","value":"x"}`,
+		"unknown op":        `{"path":"message","op":"matches","value":"x"}`,
+		"missing value":     `{"path":"message","op":"equals"}`,
+		"object value":      `{"path":"message","op":"equals","value":{"a":1}}`,
+		"contains non-text": `{"path":"message","op":"contains","value":1}`,
+		"empty in":          `{"path":"message","op":"in","values":[]}`,
+	}
+	for name, cond := range invalid {
+		t.Run(name, func(t *testing.T) {
+			var filters []WebhookEventFilter
+			if err := json.Unmarshal([]byte(`[{"event":"chat_1","conditions":[`+cond+`]}]`), &filters); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if err := validateWebhookEventFilters(filters); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+
+	tooMany := WebhookEventFilter{Event: "chat_1"}
+	for range maxWebhookPayloadConditions + 1 {
+		tooMany.Conditions = append(tooMany.Conditions, WebhookPayloadCondition{Path: "a", Op: payloadOpEquals, Value: "x"})
+	}
+	if err := validateWebhookEventFilters([]WebhookEventFilter{tooMany}); err == nil {
+		t.Fatal("expected error above the condition cap")
+	}
+}
+
 func TestSplitWebhookEvent(t *testing.T) {
 	tests := []struct {
 		input        string
