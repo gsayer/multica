@@ -215,19 +215,21 @@ func TestWebhookHandler_PayloadConditionsGateRuns(t *testing.T) {
 	agentID := createWebhookTestAgent(t, "WebhookConditions Agent")
 	apID := createWebhookTestAutopilot(t, agentID, "active", "run_only")
 	trig := createWebhookTriggerWithFilters(t, apID, []WebhookEventFilter{{
-		Event: "chat_1",
+		Event:   "issues",
+		Actions: []string{"labeled"},
 		Conditions: []WebhookPayloadCondition{
-			{Path: "is_sender", Op: payloadOpEquals, Value: false},
-			{Path: "message", Op: payloadOpContains, Value: "@bot", IgnoreCase: true},
+			{Path: "label.name", Op: payloadOpEquals, Value: "agent"},
+			{Path: "sender.type", Op: payloadOpNotEquals, Value: "Bot"},
 		},
 	}})
 	if len(trig.EventFilters) != 1 || len(trig.EventFilters[0].Conditions) != 2 {
 		t.Fatalf("conditions should round-trip on create, got %#v", trig.EventFilters)
 	}
+	headers := map[string]string{"X-GitHub-Event": "issues"}
 
 	w := postWebhook(t, *trig.WebhookToken, map[string]any{
-		"event": "chat_1", "is_sender": false, "message": "just chatting",
-	}, nil)
+		"action": "labeled", "label": map[string]any{"name": "bug"}, "sender": map[string]any{"type": "User"},
+	}, headers)
 	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -237,8 +239,8 @@ func TestWebhookHandler_PayloadConditionsGateRuns(t *testing.T) {
 	}
 
 	w = postWebhook(t, *trig.WebhookToken, map[string]any{
-		"event": "chat_1", "is_sender": false, "message": "@Bot summarize",
-	}, nil)
+		"action": "labeled", "label": map[string]any{"name": "agent"}, "sender": map[string]any{"type": "User"},
+	}, headers)
 	delivery := processQueuedWebhookDelivery(t, requireAcceptedWebhookResponse(t, w))
 	if delivery.Status != deliveryStatusDispatched || !delivery.AutopilotRunID.Valid {
 		t.Fatalf("expected worker dispatch, got status=%s run=%v", delivery.Status, delivery.AutopilotRunID.Valid)
@@ -253,8 +255,8 @@ func TestCreateAutopilotTrigger_RejectsInvalidPayloadCondition(t *testing.T) {
 	req := newRequest("POST", "/api/autopilots/"+apID+"/triggers", map[string]any{
 		"kind": "webhook",
 		"event_filters": []map[string]any{{
-			"event":      "chat_1",
-			"conditions": []map[string]any{{"path": "message", "op": "matches", "value": "@bot"}},
+			"event":      "issues",
+			"conditions": []map[string]any{{"path": "label.name", "op": "matches", "value": "agent"}},
 		}},
 	})
 	req = withURLParam(req, "id", apID)

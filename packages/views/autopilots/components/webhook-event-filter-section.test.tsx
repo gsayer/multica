@@ -66,10 +66,10 @@ describe("WebhookEventFilterSection", () => {
       <WebhookEventFilterSection
         filters={[
           {
-            event: "chat_1",
+            event: "pull_request",
             conditions: [
-              { path: "is_sender", op: "equals", value: false },
-              { path: "message", op: "contains", value: "@bot", ignore_case: true },
+              { path: "pull_request.draft", op: "equals", value: false },
+              { path: "pull_request.base.ref", op: "in", values: ["main", "release"] },
             ],
           },
         ]}
@@ -77,7 +77,7 @@ describe("WebhookEventFilterSection", () => {
       />,
     );
     expect(
-      screen.getByText('is_sender equals false ∧ message contains/i "@bot"'),
+      screen.getByText('pull_request.draft equals false ∧ pull_request.base.ref in ["main", "release"]'),
     ).toBeInTheDocument();
   });
 

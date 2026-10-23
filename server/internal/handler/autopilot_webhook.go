@@ -642,8 +642,8 @@ type WebhookEventFilter struct {
 }
 
 // WebhookPayloadCondition tests one field of the event payload. Path is a
-// dot-separated walk through objects (numeric segments index arrays). A
-// missing path never matches, whatever the op.
+// dot-separated walk through objects; numeric segments index arrays and "*"
+// matches any element.
 type WebhookPayloadCondition struct {
 	Path       string `json:"path"`
 	Op         string `json:"op"`
@@ -658,6 +658,8 @@ const (
 	payloadOpContains  = "contains"
 	payloadOpIn        = "in"
 )
+
+const webhookPathWildcard = "*"
 
 // maxWebhookPayloadConditions bounds the per-filter work done on the
 // unauthenticated-adjacent ingress path.
@@ -881,16 +883,35 @@ func webhookPayloadConditionsHold(conditions []WebhookPayloadCondition, payload 
 	return true
 }
 
+// webhookPayloadConditionHolds resolves the path to every value it reaches
+// (a "*" segment fans out over array elements). equals, contains and in
+// hold when any value matches; not_equals holds when none does. A path that
+// reaches nothing never matches.
 func webhookPayloadConditionHolds(c WebhookPayloadCondition, payload any) bool {
-	got, ok := lookupWebhookPayloadPath(payload, c.Path)
-	if !ok {
+	values := resolveWebhookPayloadPath(payload, strings.Split(c.Path, "."))
+	if len(values) == 0 {
 		return false
 	}
+	if c.Op == payloadOpNotEquals {
+		for _, got := range values {
+			if webhookConditionValuesEqual(got, c.Value, c.IgnoreCase) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, got := range values {
+		if webhookConditionValueMatches(c, got) {
+			return true
+		}
+	}
+	return false
+}
+
+func webhookConditionValueMatches(c WebhookPayloadCondition, got any) bool {
 	switch c.Op {
 	case payloadOpEquals:
 		return webhookConditionValuesEqual(got, c.Value, c.IgnoreCase)
-	case payloadOpNotEquals:
-		return !webhookConditionValuesEqual(got, c.Value, c.IgnoreCase)
 	case payloadOpContains:
 		s, ok := got.(string)
 		want, wantOK := c.Value.(string)
@@ -907,32 +928,40 @@ func webhookPayloadConditionHolds(c WebhookPayloadCondition, payload any) bool {
 				return true
 			}
 		}
-		return false
 	}
 	return false
 }
 
-func lookupWebhookPayloadPath(payload any, path string) (any, bool) {
-	cur := payload
-	for _, seg := range strings.Split(path, ".") {
-		switch node := cur.(type) {
-		case map[string]any:
-			next, ok := node[seg]
-			if !ok {
-				return nil, false
-			}
-			cur = next
-		case []any:
-			idx, err := strconv.Atoi(seg)
-			if err != nil || idx < 0 || idx >= len(node) {
-				return nil, false
-			}
-			cur = node[idx]
-		default:
-			return nil, false
-		}
+// resolveWebhookPayloadPath walks objects by key and arrays by index or
+// "*". Each payload node is visited at most once per path, so the work is
+// bounded by the body size cap.
+func resolveWebhookPayloadPath(node any, segs []string) []any {
+	if len(segs) == 0 {
+		return []any{node}
 	}
-	return cur, true
+	seg, rest := segs[0], segs[1:]
+	switch n := node.(type) {
+	case map[string]any:
+		next, ok := n[seg]
+		if !ok {
+			return nil
+		}
+		return resolveWebhookPayloadPath(next, rest)
+	case []any:
+		if seg == webhookPathWildcard {
+			var out []any
+			for _, el := range n {
+				out = append(out, resolveWebhookPayloadPath(el, rest)...)
+			}
+			return out
+		}
+		idx, err := strconv.Atoi(seg)
+		if err != nil || idx < 0 || idx >= len(n) {
+			return nil
+		}
+		return resolveWebhookPayloadPath(n[idx], rest)
+	}
+	return nil
 }
 
 // webhookConditionValuesEqual compares JSON-decoded scalars. Mismatched

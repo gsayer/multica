@@ -67,8 +67,8 @@ export interface Autopilot {
 export type WebhookPayloadConditionValue = string | number | boolean;
 
 // A payload condition tests one field of the webhook body. `path` walks
-// objects with dots (numeric segments index arrays); a missing path never
-// matches.
+// objects with dots; numeric segments index arrays and `*` matches any
+// element. A missing path never matches.
 export interface WebhookPayloadCondition {
   path: string;
   op: "equals" | "not_equals" | "contains" | "in";
